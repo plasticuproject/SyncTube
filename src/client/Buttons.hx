@@ -102,7 +102,7 @@ class Buttons {
 			} else {
 				main.isSyncActive = true;
 				icon.style.color = "";
-				icon.setAttribute("name", "play");
+				icon.setAttribute("name", "close");
 				main.send({type: UpdatePlaylist});
 			}
 		}
