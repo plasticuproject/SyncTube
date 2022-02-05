@@ -7,7 +7,7 @@ Default channel example: http://synctube-example.herokuapp.com/
 ### New features
 - Reworked layout and theme
 - Multi-Language support
-- Hotkeys (`Alt-P` for global play/pause, [etc](https://github.com/RblSb/SyncTube/blob/80ec4ba1747d22ec136a95d6b35ba6289e15e8ad/src/client/Buttons.hx#L254-L258))
+- Hotkeys (`Alt-P` for global play/pause, [etc](https://github.com/RblSb/SyncTube/blob/80ec4ba1747d22ec136a95d6b35ba6289e15e8ad/src/client/Buttons.hx#L267-L271))
 - Mobile view with page fullscreen
 - Way to play local videos for network users (without NAT loopback feature)
 - Playback rate synchronization (with leader)
@@ -54,7 +54,7 @@ It's just works, but you can also check [user/ folder](/user/README.md) for serv
 - Add `APP_URL` config var with `your-app-link.herokuapp.com` value to prevent sleeping when clients online
 
 ### Development
-- Install [Haxe 4.1](https://haxe.org/download/), [VSCode](https://code.visualstudio.com) and [Haxe extension](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe)
+- Install [Haxe 4.2](https://haxe.org/download/), [VSCode](https://code.visualstudio.com) and [Haxe extension](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe)
 - `haxelib install all` to install extern libs
 - If you skipped `Setup` section before: `npm ci`
 - Open project in VSCode and press `F5` for client+server build and run
