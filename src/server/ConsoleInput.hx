@@ -1,13 +1,14 @@
 package server;
 
+import haxe.Json;
 import haxe.extern.EitherType as Or;
 import haxe.io.Path;
-import haxe.Json;
-import sys.FileSystem;
-import sys.io.File;
+import js.Node.process;
 import js.html.Console;
 import js.node.Readline;
-import js.Node.process;
+import sys.FileSystem;
+import sys.io.File;
+
 using StringTools;
 
 private typedef CommandData = {
@@ -17,18 +18,22 @@ private typedef CommandData = {
 
 private enum abstract Command(String) from String {
 	var AddAdmin = "addAdmin";
+	var RemoveAdmin = "removeAdmin";
 	var Replay = "replay";
 	var LogList = "logList";
 	var Exit = "exit";
 }
 
 class ConsoleInput {
-
 	final main:Main;
 	final commands:Map<Command, CommandData> = [
 		AddAdmin => {
 			args: ["name", "password"],
 			desc: "Adds channel admin"
+		},
+		RemoveAdmin => {
+			args: ["name"],
+			desc: "Removes channel admin"
 		},
 		Replay => {
 			args: ["name"],
@@ -54,10 +59,10 @@ class ConsoleInput {
 			output: process.stdout,
 			completer: onCompletion
 		});
-		haxe.Log.trace = (msg, ?pos) -> {
+		haxe.Log.trace = (msg:Dynamic, ?infos:haxe.PosInfos) -> {
 			Readline.clearLine(process.stdout, 0);
 			Readline.cursorTo(process.stdout, 0, null);
-			Console.log(msg);
+			Console.log(formatOutput(msg, infos));
 			rl.prompt(true);
 		};
 		rl.prompt();
@@ -66,6 +71,16 @@ class ConsoleInput {
 			rl.prompt();
 		});
 		// rl.on("close", exit);
+	}
+
+	function formatOutput(v:Dynamic, infos:haxe.PosInfos):String {
+		var str = Std.string(v);
+		if (infos == null) return str;
+		if (infos.customParams != null) {
+			for (v in infos.customParams)
+				str += ", " + Std.string(v);
+		}
+		return str;
 	}
 
 	function onCompletion(line:String):Array<Or<Array<String>, String>> {
@@ -102,6 +117,10 @@ class ConsoleInput {
 				}
 				main.addAdmin(name, password);
 
+			case RemoveAdmin:
+				final name = args[0];
+				main.removeAdmin(name);
+
 			case Replay:
 				Utils.ensureDir(main.logsDir);
 				final name = args[0];
@@ -116,9 +135,12 @@ class ConsoleInput {
 
 			case LogList:
 				Utils.ensureDir(main.logsDir);
-				final names = FileSystem.readDirectory(main.logsDir)
-					.filter(s -> s.endsWith(".json"));
-				for (name in names) trace(Path.withoutExtension(name));
+				final names = FileSystem.readDirectory(main.logsDir).filter(s -> {
+					return s.endsWith(".json");
+				});
+				for (name in names) {
+					trace(Path.withoutExtension(name));
+				}
 
 			case Exit:
 				main.exit();
@@ -150,5 +172,4 @@ class ConsoleInput {
 		final desc = list.join("\n");
 		trace('Unknown command "$line". List:\n$desc');
 	}
-
 }

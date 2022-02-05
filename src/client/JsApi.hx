@@ -1,18 +1,18 @@
 package client;
 
-import Types.WsEventType;
-import Types.WsEvent;
 import Types.VideoItem;
+import Types.WsEvent;
+import Types.WsEventType;
 import js.Browser.document;
 import js.Browser.window;
 import js.Syntax;
+
 using StringTools;
 
-private typedef VideoChangeFunc = (item:VideoItem)->Void;
-private typedef OnceEventFunc = (event:WsEvent)->Void;
+private typedef VideoChangeFunc = (item:VideoItem) -> Void;
+private typedef OnceEventFunc = (event:WsEvent) -> Void;
 
 class JsApi {
-
 	static var main:Main;
 	static var player:Player;
 	static final subtitleFormats = [];
@@ -32,7 +32,7 @@ class JsApi {
 	}
 
 	@:expose
-	static function addPlugin(id:String, ?onLoaded:()->Void):Void {
+	static function addPlugin(id:String, ?onLoaded:() -> Void):Void {
 		addScriptToHead('/plugins/$id/index.js', () -> {
 			final obj = {
 				api: Syntax.plainCode("client.JsApi"),
@@ -49,7 +49,7 @@ class JsApi {
 	}
 
 	@:expose
-	public static function addScriptToHead(url:String, ?onLoaded:()->Void):Void {
+	public static function addScriptToHead(url:String, ?onLoaded:() -> Void):Void {
 		final script = document.createScriptElement();
 		script.type = "text/javascript";
 		script.onload = onLoaded;
@@ -63,6 +63,24 @@ class JsApi {
 			if ((child : Dynamic).src == url) return true;
 		}
 		return false;
+	}
+
+	@:expose
+	static function getVideoItems():Array<VideoItem> {
+		final items = player.getItems();
+		return [
+			for (item in items) Reflect.copy(item)
+		];
+	}
+
+	@:expose
+	static function addVideoItem(url:String, atEnd:Bool, isTemp:Bool, ?callback:() -> Void):Void {
+		main.addVideo(url, atEnd, isTemp, callback);
+	}
+
+	@:expose
+	static function removeVideoItem(url:String):Void {
+		main.removeVideoItem(url);
 	}
 
 	@:expose
@@ -86,7 +104,7 @@ class JsApi {
 	}
 
 	@:expose
-	static function setVideoSrc(src:String):Void {
+	public static function setVideoSrc(src:String):Void {
 		player.changeVideoSrc(src);
 	}
 
@@ -102,6 +120,13 @@ class JsApi {
 		return main.globalIp;
 	}
 
+	/**
+	 * If plugin adds any subtitle format (like `ass`),
+	 * you will see subtitle input below video url input on client page.
+	 * Plugins can listen to `notifyOnVideoChange(item => {...}`
+	 * for raw videos and load that input data from `item.subs` url to do something.
+	 * See `https://github.com/RblSb/SyncTube-octosubs` as example.
+	 */
 	@:expose
 	static function addSubtitleSupport(format:String):Void {
 		format = format.trim().toLowerCase();
@@ -115,6 +140,13 @@ class JsApi {
 		return subtitleFormats.contains(format);
 	}
 
+	/**
+	 * Listen to server event once before that event is parsed by client.
+	 * Example:
+	 * `JsApi.once("RemoveVideo", event => {`
+	 * `  if (event.removeVideo.url == url) {...}`
+	 * `});`
+	 */
 	@:expose
 	public static function once(type:WsEventType, func:OnceEventFunc):Void {
 		onceListeners.push({type: type, func: func});
@@ -144,7 +176,9 @@ class JsApi {
 	}
 
 	public static function fireVideoChangeEvents(item:VideoItem):Void {
-		for (func in videoChange) func(item);
+		for (func in videoChange) {
+			func(item);
+		}
 	}
 
 	@:expose
@@ -158,7 +192,8 @@ class JsApi {
 	}
 
 	public static function fireVideoRemoveEvents(item:VideoItem):Void {
-		for (func in videoRemove) func(item);
+		for (func in videoRemove) {
+			func(item);
+		}
 	}
-
 }

@@ -1,19 +1,19 @@
 package client.players;
 
-import js.hlsjs.Hls;
+import Types.VideoData;
+import Types.VideoDataRequest;
+import Types.VideoItem;
+import client.Main.ge;
 import haxe.Timer;
+import js.Browser.document;
+import js.hlsjs.Hls;
 import js.html.Element;
 import js.html.InputElement;
 import js.html.VideoElement;
-import js.Browser.document;
-import client.Main.ge;
-import Types.VideoDataRequest;
-import Types.VideoData;
-import Types.VideoItem;
+
 using StringTools;
 
 class Raw implements IPlayer {
-
 	final main:Main;
 	final player:Player;
 	final playerEl:Element = ge("#ytapiplayer");
@@ -34,7 +34,7 @@ class Raw implements IPlayer {
 		return true;
 	}
 
-	public function getVideoData(data:VideoDataRequest, callback:(data:VideoData)->Void):Void {
+	public function getVideoData(data:VideoDataRequest, callback:(data:VideoData) -> Void):Void {
 		final url = data.url;
 		final decodedUrl = url.urlDecode();
 
@@ -54,11 +54,8 @@ class Raw implements IPlayer {
 		}
 
 		titleInput.value = "";
-		var subs = "";
-		if (JsApi.hasSubtitleSupport()) {
-			subs = subsInput.value.trim();
-			subsInput.value = "";
-		}
+		final subs = subsInput.value.trim();
+		subsInput.value = "";
 		final video = document.createVideoElement();
 		video.src = url;
 		video.onerror = e -> {
@@ -77,7 +74,7 @@ class Raw implements IPlayer {
 		if (isHls) initHlsSource(video, url);
 	}
 
-	function loadHlsPlugin(callback:()->Void):Void {
+	function loadHlsPlugin(callback:() -> Void):Void {
 		final url = "https://cdn.jsdelivr.net/npm/hls.js@latest";
 		JsApi.addScriptToHead(url, () -> {
 			isHlsLoaded = true;
@@ -101,24 +98,28 @@ class Raw implements IPlayer {
 		}
 		if (video != null) {
 			video.src = url;
-			if (isHls) initHlsSource(video, url);
-			restartControlsHider();
-			return;
+			for (element in video.children) {
+				if (element.nodeName != "TRACK") continue;
+				element.remove();
+			}
+		} else {
+			video = document.createVideoElement();
+			video.id = "videoplayer";
+			video.setAttribute("playsinline", "");
+			video.src = url;
+			video.oncanplaythrough = player.onCanBePlayed;
+			video.onseeking = player.onSetTime;
+			video.onplay = e -> {
+				playAllowed = true;
+				player.onPlay();
+			}
+			video.onpause = player.onPause;
+			video.onratechange = player.onRateChange;
+			playerEl.appendChild(video);
 		}
-		video = document.createVideoElement();
-		video.id = "videoplayer";
-		video.src = url;
-		restartControlsHider();
-		video.oncanplaythrough = player.onCanBePlayed;
-		video.onseeking = player.onSetTime;
-		video.onplay = e -> {
-			playAllowed = true;
-			player.onPlay();
-		}
-		video.onpause = player.onPause;
-		video.onratechange = player.onRateChange;
-		playerEl.appendChild(video);
 		if (isHls) initHlsSource(video, url);
+		restartControlsHider();
+		RawSubs.loadSubs(item, video);
 	}
 
 	function restartControlsHider():Void {
@@ -126,6 +127,7 @@ class Raw implements IPlayer {
 		if (Utils.isTouch()) return;
 		if (controlsHider != null) controlsHider.stop();
 		controlsHider = Timer.delay(() -> {
+			if (video == null) return;
 			video.controls = false;
 		}, 3000);
 		video.onmousemove = e -> {
@@ -177,5 +179,4 @@ class Raw implements IPlayer {
 	public function setPlaybackRate(rate:Float):Void {
 		video.playbackRate = rate;
 	}
-
 }

@@ -8,14 +8,16 @@
 	"userVideoLimit": 0,
 	"requestLeaderOnPause": false,
 	"localAdmins": true,
+	"allowProxyIps": true,
 	"templateUrl": "https://youtube.com/playlist?list=PL9FiZUDVMu9tc_85frYognMOVFC_-VkSX",
 	"youtubeApiKey": "AIzaSyDTk1OPRI9cDkAK_BKsBcv10DQCHse-QaA",
 	"youtubePlaylistLimit": 50,
 	"permissions": {
+		"banned": [],
 		"guest": ["writeChat", "addVideo", "removeVideo", "changeOrder", "requestLeader", "rewind"],
 		"user": ["guest"],
 		"leader": ["user"],
-		"admin": ["user", "clearChat", "setLeader", "lockPlaylist"]
+		"admin": ["user", "clearChat", "setLeader", "lockPlaylist", "banClient"]
 	},
 	"emotes": [
 		{"name": ":adorable:", "image": "https://i.imgur.com/5GxNwDY.png"},

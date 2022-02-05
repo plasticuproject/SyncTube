@@ -25,6 +25,7 @@ typedef Config = {
 	userVideoLimit:Int,
 	requestLeaderOnPause:Bool,
 	localAdmins:Bool,
+	allowProxyIps:Bool,
 	templateUrl:String,
 	youtubeApiKey:String,
 	youtubePlaylistLimit:Int,
@@ -36,6 +37,7 @@ typedef Config = {
 }
 
 typedef Permissions = {
+	banned:Array<Permission>,
 	guest:Array<Permission>,
 	user:Array<Permission>,
 	leader:Array<Permission>,
@@ -56,16 +58,23 @@ enum abstract Permission(String) {
 	var SetLeaderPerm = "setLeader";
 	var ChangeOrderPerm = "changeOrder";
 	var LockPlaylistPerm = "lockPlaylist";
+	var BanClientPerm = "banClient";
 }
 
 typedef UserList = {
 	admins:Array<UserField>,
+	bans:Array<BanField>,
 	?salt:String
 }
 
 typedef UserField = {
 	name:String,
 	hash:String
+}
+
+typedef BanField = {
+	ip:String,
+	toDate:Date
 }
 
 typedef Emote = {
@@ -130,6 +139,13 @@ typedef WsEvent = {
 	?updateClients:{
 		clients:Array<ClientData>,
 	},
+	?banClient:{
+		name:String,
+		time:Float
+	},
+	?kickClient:{
+		name:String,
+	},
 	?addVideo:{
 		item:VideoItem,
 		atEnd:Bool
@@ -177,6 +193,9 @@ typedef WsEvent = {
 	},
 	?togglePlaylistLock:{
 		isOpen:Bool
+	},
+	?dump:{
+		data:String
 	}
 }
 
@@ -192,6 +211,8 @@ enum abstract WsEventType(String) {
 	var UpdateClients;
 	// var AddClient;
 	// var RemoveClient;
+	var BanClient;
+	var KickClient;
 	var AddVideo;
 	var RemoveVideo;
 	var SkipVideo;
@@ -202,6 +223,7 @@ enum abstract WsEventType(String) {
 	var SetTime;
 	var SetRate;
 	var Rewind;
+	var Flashback;
 	var SetLeader;
 	var PlayItem;
 	var SetNextItem;
@@ -211,4 +233,5 @@ enum abstract WsEventType(String) {
 	var ShufflePlaylist;
 	var UpdatePlaylist;
 	var TogglePlaylistLock;
+	var Dump;
 }

@@ -1,49 +1,54 @@
 package client;
 
-import haxe.crypto.Sha256;
-import haxe.Timer;
-import haxe.Json;
-import js.html.MouseEvent;
-import js.html.KeyboardEvent;
-import js.html.Event;
-import js.html.Element;
-import js.html.VideoElement;
-import js.html.InputElement;
-import js.html.ButtonElement;
-import js.html.WebSocket;
-import js.Browser;
-import js.Browser.document;
-import js.Browser.window;
 import Client.ClientData;
-import Types.VideoDataRequest;
-import Types.VideoData;
+import Client.ClientGroup;
 import Types.Config;
 import Types.Permission;
-import Client.ClientGroup;
+import Types.VideoData;
+import Types.VideoDataRequest;
 import Types.WsEvent;
-using StringTools;
+import haxe.Json;
+import haxe.Timer;
+import haxe.crypto.Sha256;
+import js.Browser.document;
+import js.Browser.window;
+import js.Browser;
+import js.html.ButtonElement;
+import js.html.Element;
+import js.html.Event;
+import js.html.InputElement;
+import js.html.KeyboardEvent;
+import js.html.MouseEvent;
+import js.html.VideoElement;
+import js.html.WebSocket;
+
 using ClientTools;
+using StringTools;
 
 class Main {
+	static inline var SETTINGS_VERSION = 3;
 
-	static inline var SETTINGS_VERSION = 2;
 	public final settings:ClientSettings;
 	public var isSyncActive = true;
 	public var forceSyncNextTick = false;
-	final clients:Array<Client> = [];
-	var pageTitle = document.title;
 	public final host:String;
 	public var globalIp(default, null) = "";
+
+	final clients:Array<Client> = [];
+	var pageTitle = document.title;
 	var config:Null<Config>;
 	final filters:Array<{regex:EReg, replace:String}> = [];
 	var personal = new Client("Unknown", 0);
 	var isConnected = false;
+	var disabledReconnection = false;
 	var ws:WebSocket;
 	final player:Player;
 	var onTimeGet:Timer;
 	var onBlinkTab:Null<Timer>;
 
-	static function main():Void new Main();
+	static function main():Void {
+		new Main();
+	}
 
 	function new() {
 		player = new Player(this);
@@ -61,6 +66,7 @@ class Main {
 			isSwapped: false,
 			isUserListHidden: true,
 			latestLinks: [],
+			latestSubs: [],
 			hotkeysEnabled: true
 		}
 		Settings.init(defaults, settingsPatcher);
@@ -89,6 +95,9 @@ class Main {
 			case 1:
 				final data:ClientSettings = data;
 				data.hotkeysEnabled = true;
+			case 2:
+				final data:ClientSettings = data;
+				data.latestSubs = [];
 			case SETTINGS_VERSION, _:
 				throw 'skipped version $version';
 		}
@@ -119,6 +128,7 @@ class Main {
 			if (isConnected) serverMessage(2);
 			isConnected = false;
 			player.pause();
+			if (disabledReconnection) return;
 			Timer.delay(openWebSocket, 2000);
 		}
 	}
@@ -150,9 +160,10 @@ class Main {
 		ge("#mediatitle").onkeydown = (e:KeyboardEvent) -> {
 			if (e.keyCode == KeyCode.Return) addVideoUrl(true);
 		}
-		ge("#subsurl").onkeydown = (e:KeyboardEvent) -> {
-			if (e.keyCode == KeyCode.Return) addVideoUrl(true);
-		}
+		new InputWithHistory(cast ge("#subsurl"), settings.latestSubs, 10, value -> {
+			addVideoUrl(true);
+			return false;
+		});
 
 		ge("#ce_queue_next").onclick = e -> addIframe(false);
 		ge("#ce_queue_end").onclick = e -> addIframe(true);
@@ -162,8 +173,7 @@ class Main {
 				e.preventDefault();
 			}
 		}
-		ge("#customembed-content").onkeydown =
-			ge("#customembed-title").onkeydown;
+		ge("#customembed-content").onkeydown = ge("#customembed-title").onkeydown;
 	}
 
 	public inline function isUser():Bool {
@@ -202,12 +212,17 @@ class Main {
 
 	function addVideoUrl(atEnd:Bool):Void {
 		final mediaUrl:InputElement = cast ge("#mediaurl");
+		final subsUrl:InputElement = cast ge("#subsurl");
 		final checkbox:InputElement = cast ge("#addfromurl").querySelector(".add-temp");
 		final isTemp = checkbox.checked;
 		final url = mediaUrl.value;
+		final subs = subsUrl.value;
 		if (url.length == 0) return;
 		mediaUrl.value = "";
 		InputWithHistory.pushIfNotLast(settings.latestLinks, url);
+		if (subs.length != 0) {
+			InputWithHistory.pushIfNotLast(settings.latestSubs, subs);
+		}
 		Settings.write(settings);
 		final url = ~/, ?(https?)/g.replace(url, "|$1");
 		final links = url.split("|");
@@ -242,7 +257,7 @@ class Main {
 		addVideo(link, atEnd, isTemp, () -> addVideoArray(links, atEnd, isTemp));
 	}
 
-	function addVideo(url:String, atEnd:Bool, isTemp:Bool, callback:()->Void):Void {
+	public function addVideo(url:String, atEnd:Bool, isTemp:Bool, ?callback:() -> Void):Void {
 		final protocol = Browser.location.protocol;
 		if (url.startsWith("/")) {
 			final host = Browser.location.hostname;
@@ -263,7 +278,8 @@ class Main {
 			if (data.title == null) data.title = Lang.get("rawVideo");
 			if (data.url == null) data.url = url;
 			send({
-				type: AddVideo, addVideo: {
+				type: AddVideo,
+				addVideo: {
 					item: {
 						url: data.url,
 						title: data.title,
@@ -274,8 +290,9 @@ class Main {
 						isIframe: data.isIframe == true
 					},
 					atEnd: atEnd
-			}});
-			callback();
+				}
+			});
+			if (callback != null) callback();
 		});
 	}
 
@@ -302,7 +319,8 @@ class Main {
 			if (data.title == null) data.title = "Custom Media";
 			if (data.url == null) data.url = iframe;
 			send({
-				type: AddVideo, addVideo: {
+				type: AddVideo,
+				addVideo: {
 					item: {
 						url: data.url,
 						title: data.title,
@@ -312,7 +330,17 @@ class Main {
 						isIframe: true
 					},
 					atEnd: atEnd
-			}});
+				}
+			});
+		});
+	}
+
+	public function removeVideoItem(url:String) {
+		send({
+			type: RemoveVideo,
+			removeVideo: {
+				url: url
+			}
 		});
 	}
 
@@ -356,8 +384,8 @@ class Main {
 			case Connected:
 				onConnected(data);
 				onTimeGet.run();
-			case Disconnected: // server-only
 
+			case Disconnected: // server-only
 			case Login:
 				onLogin(data.login.clients, data.login.clientName);
 
@@ -385,6 +413,10 @@ class Main {
 				personal = clients.getByName(personal.name, personal);
 				if (personal.group.toInt() != oldGroup) onUserGroupChanged();
 
+			case BanClient: // server-only
+			case KickClient:
+				disabledReconnection = true;
+				ws.close();
 			case Message:
 				addMessage(data.message.clientName, data.message.text);
 
@@ -457,7 +489,9 @@ class Main {
 				else player.pause();
 				player.setPauseIndicator(!data.getTime.paused);
 				if (Math.abs(time - newTime) < synchThreshold) return;
-				player.setTime(newTime);
+				// +0.5s for buffering
+				if (!data.getTime.paused) player.setTime(newTime + 0.5);
+				else player.setTime(newTime);
 
 			case SetTime:
 				final synchThreshold = settings.synchThreshold;
@@ -471,8 +505,9 @@ class Main {
 				player.setPlaybackRate(data.setRate.rate);
 
 			case Rewind:
-				player.setTime(data.rewind.time);
+				player.setTime(data.rewind.time + 0.5);
 
+			case Flashback: // server-only
 			case SetLeader:
 				clients.setLeader(data.setLeader.clientName);
 				updateUserList();
@@ -501,6 +536,9 @@ class Main {
 
 			case TogglePlaylistLock:
 				setPlaylistLock(data.togglePlaylistLock.isOpen);
+
+			case Dump:
+				Utils.saveFile("dump.json", ApplicationJson, data.dump.data);
 		}
 	}
 
@@ -548,7 +586,8 @@ class Main {
 	public function guestLogin(name:String):Void {
 		if (name.length == 0) return;
 		send({
-			type: Login, login: {
+			type: Login,
+			login: {
 				clientName: name
 			}
 		});
@@ -568,7 +607,8 @@ class Main {
 
 	public function loginRequest(name:String, hash:String):Void {
 		send({
-			type: Login, login: {
+			type: Login,
+			login: {
 				clientName: name,
 				passHash: hash
 			}
@@ -577,6 +617,7 @@ class Main {
 
 	function setConfig(config:Config):Void {
 		this.config = config;
+		if (Utils.isTouch()) config.requestLeaderOnPause = false;
 		pageTitle = config.channelName;
 		final login:InputElement = cast ge("#guestname");
 		login.maxLength = config.maxLoginLength;
@@ -662,7 +703,7 @@ class Main {
 		ws.send(Json.stringify(data));
 	}
 
-	public function serverMessage(type:Int, ?text:String, isText = true):Void {
+	public static function serverMessage(type:Int, ?text:String, isText = true):Void {
 		final msgBuf = ge("#messagebuffer");
 		final div = document.createDivElement();
 		final time = Date.now().toString().split(" ")[1];
@@ -700,7 +741,8 @@ class Main {
 		for (client in clients) {
 			list.add('<div class="userlist_item">');
 			if (client.isLeader) list.add('<ion-icon name="play"></ion-icon>');
-			final klass = client.isAdmin ? "userlist_owner" : "";
+			var klass = client.isBanned ? "userlist_banned" : "";
+			if (client.isAdmin) klass += " userlist_owner";
 			list.add('<span class="$klass">${client.name}</span></div>');
 		}
 		final userlist = ge("#userlist");
@@ -736,12 +778,8 @@ class Main {
 		textDiv.className = "text";
 		text = text.htmlEscape();
 
-		if (text.startsWith("/")) {
-			if (name == personal.name) handleCommands(text.substr(1));
-		} else {
-			for (filter in filters) {
-				text = filter.regex.replace(text, filter.replace);
-			}
+		for (filter in filters) {
+			text = filter.regex.replace(text, filter.replace);
 		}
 		textDiv.innerHTML = text;
 		final isInChatEnd = msgBuf.scrollTop + msgBuf.clientHeight >= msgBuf.scrollHeight - 1;
@@ -761,7 +799,9 @@ class Main {
 		userDiv.appendChild(textDiv);
 		msgBuf.appendChild(userDiv);
 		if (isInChatEnd) {
-			while (msgBuf.children.length > 200) msgBuf.removeChild(msgBuf.firstChild);
+			while (msgBuf.children.length > 200) {
+				msgBuf.removeChild(msgBuf.firstChild);
+			}
 			msgBuf.scrollTop = msgBuf.scrollHeight;
 		}
 		if (name == personal.name) {
@@ -780,7 +820,8 @@ class Main {
 	function onChatVideoLoaded(e:Event):Void {
 		final el:VideoElement = cast e.target;
 		if (emoteMaxSize == null) {
-			emoteMaxSize = Std.parseInt(window.getComputedStyle(el).getPropertyValue("max-width"));
+			emoteMaxSize = Std.parseInt(window.getComputedStyle(el)
+				.getPropertyValue("max-width"));
 		}
 		// fixes default video tag size in chat when tab unloads videos in background
 		// (some browsers optimization i guess)
@@ -797,18 +838,104 @@ class Main {
 		msgBuf.scrollTop = msgBuf.scrollHeight;
 	}
 
-	final matchNumbers = ~/^-?[0-9]+$/;
+	/* Returns `true` if text should not be sent to chat */
+	public function handleCommands(command:String):Bool {
+		if (!command.startsWith("/")) return false;
+		final args = command.trim().split(" ");
+		command = args.shift().substr(1);
 
-	function handleCommands(text:String):Void {
-		switch (text) {
+		switch (command) {
+			case "ban":
+				mergeRedundantArgs(args, 0, 2);
+				final name = args[0];
+				final time = parseSimpleDate(args[1]);
+				if (time < 0) return true;
+				send({
+					type: BanClient,
+					banClient: {
+						name: name,
+						time: time
+					}
+				});
+				return true;
+			case "unban", "removeBan":
+				mergeRedundantArgs(args, 0, 1);
+				final name = args[0];
+				send({
+					type: BanClient,
+					banClient: {
+						name: name,
+						time: 0
+					}
+				});
+				return true;
+			case "kick":
+				mergeRedundantArgs(args, 0, 1);
+				final name = args[0];
+				send({
+					type: KickClient,
+					kickClient: {
+						name: name
+					}
+				});
+				return true;
 			case "clear":
-				if (isAdmin()) send({type: ClearChat});
+				send({type: ClearChat});
+				return true;
+			case "flashback", "fb":
+				send({type: Flashback});
+				return false;
+			case "dump":
+				send({type: Dump});
+				return true;
 		}
-		if (matchNumbers.match(text)) {
-			send({type: Rewind, rewind: {
-				time: Std.parseInt(text)
-			}});
+		if (matchSimpleDate.match(command)) {
+			send({
+				type: Rewind,
+				rewind: {
+					time: parseSimpleDate(command)
+				}
+			});
+			return false;
 		}
+		return false;
+	}
+
+	final matchSimpleDate = ~/^-?([0-9]+d)?([0-9]+h)?([0-9]+m)?([0-9]+s?)?$/;
+
+	function parseSimpleDate(text:Null<String>):Int {
+		if (text == null) return 0;
+		if (!matchSimpleDate.match(text)) return 0;
+		final matches:Array<String> = [];
+		final length = Utils.matchedNum(matchSimpleDate);
+		for (i in 1...length) {
+			final group = matchSimpleDate.matched(i);
+			if (group == null) continue;
+			matches.push(group);
+		}
+		var seconds = 0;
+		for (block in matches) {
+			seconds += parseSimpleDateBlock(block);
+		}
+		if (text.startsWith("-")) seconds = -seconds;
+		return seconds;
+	}
+
+	function parseSimpleDateBlock(block:String):Int {
+		inline function time():Int {
+			return Std.parseInt(block.substr(0, block.length - 1));
+		}
+		if (block.endsWith("s")) return time();
+		else if (block.endsWith("m")) return time() * 60;
+		else if (block.endsWith("h")) return time() * 60 * 60;
+		else if (block.endsWith("d")) return time() * 60 * 60 * 24;
+		return Std.parseInt(block);
+	}
+
+	function mergeRedundantArgs(args:Array<String>, pos:Int, newLength:Int):Void {
+		final count = args.length - (newLength - 1);
+		if (count < 2) return;
+		args.insert(pos, args.splice(pos, count).join(" "));
 	}
 
 	public function blinkTabWithTitle(title:String):Void {
@@ -816,9 +943,11 @@ class Main {
 		if (onBlinkTab != null) onBlinkTab.stop();
 		onBlinkTab = new Timer(1000);
 		onBlinkTab.run = () -> {
-			if (document.title.startsWith(pageTitle))
+			if (document.title.startsWith(pageTitle)) {
 				document.title = title;
-			else document.title = getPageTitle();
+			} else {
+				document.title = getPageTitle();
+			}
 		}
 		onBlinkTab.run();
 	}
@@ -904,5 +1033,4 @@ class Main {
 	public static inline function ge(id:String):Element {
 		return document.querySelector(id);
 	}
-
 }

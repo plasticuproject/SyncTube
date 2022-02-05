@@ -1,19 +1,19 @@
 package client.players;
 
-import haxe.Json;
-import haxe.Http;
-import js.html.Element;
-import js.Browser.document;
+import Types.VideoData;
+import Types.VideoDataRequest;
+import Types.VideoItem;
 import client.Main.ge;
+import haxe.Http;
+import haxe.Json;
+import js.Browser.document;
+import js.html.Element;
 import js.youtube.Youtube as YtInit;
 import js.youtube.YoutubePlayer;
-import Types.VideoDataRequest;
-import Types.VideoData;
-import Types.VideoItem;
+
 using StringTools;
 
 class Youtube implements IPlayer {
-
 	final matchId = ~/youtube\.com.*v=([A-z0-9_-]+)/;
 	final matchShort = ~/youtu\.be\/([A-z0-9_-]+)/;
 	final matchEmbed = ~/youtube\.com\/embed\/([A-z0-9_-]+)/;
@@ -73,7 +73,7 @@ class Youtube implements IPlayer {
 		return total;
 	}
 
-	public function getVideoData(data:VideoDataRequest, callback:(data:VideoData)->Void):Void {
+	public function getVideoData(data:VideoDataRequest, callback:(data:VideoData) -> Void):Void {
 		final url = data.url;
 		if (apiKey == null) apiKey = main.getYoutubeApiKey();
 		final id = extractVideoId(url);
@@ -122,7 +122,7 @@ class Youtube implements IPlayer {
 		http.request();
 	}
 
-	function getPlaylistVideoData(data:VideoDataRequest, callback:(data:VideoData)->Void):Void {
+	function getPlaylistVideoData(data:VideoDataRequest, callback:(data:VideoData) -> Void):Void {
 		final url = data.url;
 		final id = extractPlaylistId(url);
 		var maxResults = main.getYoutubePlaylistLimit();
@@ -171,10 +171,10 @@ class Youtube implements IPlayer {
 	function youtubeApiError(error:Dynamic):Void {
 		final code:Int = error.code;
 		final msg:String = error.message;
-		main.serverMessage(4, 'Error $code: $msg', false);
+		Main.serverMessage(4, 'Error $code: $msg', false);
 	}
 
-	function getRemoteDataFallback(url:String, callback:(data:VideoData)->Void):Void {
+	function getRemoteDataFallback(url:String, callback:(data:VideoData) -> Void):Void {
 		if (!YtInit.isLoadedAPI) {
 			YtInit.init(() -> getRemoteDataFallback(url, callback));
 			return;
@@ -226,6 +226,7 @@ class Youtube implements IPlayer {
 			videoId: extractVideoId(item.url),
 			playerVars: {
 				autoplay: 1,
+				playsinline: 1,
 				modestbranding: 1,
 				rel: 0,
 				showinfo: 0
@@ -292,5 +293,4 @@ class Youtube implements IPlayer {
 	public function setPlaybackRate(rate:Float):Void {
 		youtube.setPlaybackRate(rate);
 	}
-
 }
